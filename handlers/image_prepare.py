@@ -1,6 +1,7 @@
+import io
 import random
 import time
-
+import numpy as np
 from aiogram import types,Router,F,Bot
 from aiogram.filters.command import Command
 from typing import List
@@ -9,6 +10,7 @@ from aiogram.fsm.context import FSMContext
 from glob import glob
 from aiogram.utils.media_group import MediaGroupBuilder
 import cv2
+from PIL import Image
 import os
 import shutil
 
@@ -29,66 +31,104 @@ async def cmd_start(message:types.Message,state: FSMContext):
         image_splited = image_path.split("/")[-1].split("\\")[-1].split(".")
         image_name = image_splited[1]
         image_callback = image_splited[0]
-        await state.update_data({"event":image_callback})
-        next_btn = await get_next_btn("Перейти","send_files")
+
+
+        next_btn = await get_next_btn("Перейти",f"send_files_{image_callback}")
         await message.answer_photo(photo=image,caption=image_name,reply_markup=next_btn)
 
-@router.callback_query(F.data == "send_files")
+@router.callback_query(F.data.contains("send_files"))
 async def send_photo(call: types.CallbackQuery,state: FSMContext):
+    image_callback = call.data.split("_")[-1]
+    data = await state.get_data()
     await state.set_state(Get_images.waiting_images.state)
+    if "event" in data:
+        await state.update_data({"event": data["event"]+image_callback})
+    else:
+        await state.update_data({"event": image_callback})
     await call.answer(text=f"Загрузите фотографии (группой или одно) ")
 
 @router.message(Get_images.waiting_images)
 async def photo_prepare(message: types.Message,state: FSMContext,bot:Bot):
     try:
-        album = message.photo[-1]
-        print(album)
-        if not os.path.isdir(f"before_prepare_images"):
-            os.mkdir(f"before_prepare_images")
-        if not os.path.isdir(f"before_prepare_images/{message.from_user.id}"):
+        file = message.photo
+        file_path = await bot.get_file(file[-1].file_id)
 
-            os.mkdir(f"before_prepare_images/{message.from_user.id}")
-
-        # print(obj.file_id)
-        await bot.download(
-                    album.file_id,
-                    destination=f'before_prepare_images/{message.from_user.id}/{album.file_id}.jpg'
-                )
-        photos = glob(f"./before_prepare_images/{message.from_user.id}/*.jpg")
-
-        album_builder = MediaGroupBuilder(
-            caption="Преобразованные изображения"
-        )
+        bin_img = io.BytesIO()
         data = await state.get_data()
-
-        if "event" not in data:
-            await message.answer(text=f"Повторите вход через /start")
-            shutil.rmtree(f"before_prepare_images/{message.from_user.id}")
-            return
-        for photo in photos:
-            #главная обработка как тебе нужно
-            file = None
-            if data["event"] == "grayscale":
-                file = cv2.imread(photo[2:], cv2.IMREAD_GRAYSCALE)
-
-            try:
-                album_builder.add(
-                    type="photo",
-                    media=types.BufferedInputFile(bytearray(file),filename=f"{random.randint(1000,10000000)}.jpg")
-                )
-            except PermissionError:
-                print("PermissionError: The file is being used by another process. Waiting for 5 seconds...")
-                time.sleep(5)
-        await message.answer_media_group(
-            # Не забудьте вызвать build()
-            media=album_builder.build()
+        print(file_path)
+        # path = r'docs/' + file_path.file_path+ '.jpg'
+        buf_input = types.FSInputFile(
+            file_path.file_unique_id,
+            filename=file_path.file_path
         )
-        shutil.rmtree(f"before_prepare_images/{message.from_user.id}")
+        print(buf_input.filename)
+        filename = file_path.file_path.split("/")[-1]
+        await bot.download_file(
+            file_path.file_path,
+            bin_img
+        )
+        file = None
+
+        buf_file = np.frombuffer(
+            bin_img.getvalue(),
+            np.uint8
+        )
+        img = None
+        if data["event"] == "grayscale":
+            img = cv2.imdecode(buf_file, cv2.IMREAD_GRAYSCALE)
+        img = Image.fromarray(img)
+        print(img)
+        # img.save(img, format=filename.split(".")[-1])
+        # img.seek(0)
+        # return buf
+        #с этого моента нужно разобраться как отправить массив
+
+        input_img = types.InputFile(
+            img,
+            filename=filename
+
+        )
+        await bot.send_photo(
+            message.chat.id,
+            input_img
+        )
+
+
+
+        # photos = glob(f"./before_prepare_images/{message.from_user.id}/*.jpg")
+        #
+        # album_builder = MediaGroupBuilder(
+        #     caption="Преобразованные изображения"
+        # )
+        # data = await state.get_data()
+        #
+        # if "event" not in data:
+        #     await message.answer(text=f"Повторите вход через /start")
+        #     shutil.rmtree(f"before_prepare_images/{message.from_user.id}")
+        #     return
+        # for photo in photos:
+        #     #главная обработка как тебе нужно
+        #     file = None
+        #     if data["event"] == "grayscale":
+        #         file = cv2.imread(photo[2:], cv2.IMREAD_GRAYSCALE)
+        #         if not all(file):
+        #             await message.answer(text=f"внутренний сбой, повторите вход через /start")
+        #             return
+        #     try:
+        #         album_builder.add(
+        #             type="photo",
+        #             media=types.BufferedInputFile(bytearray(file),filename=f"{random.randint(1000,10000000)}.jpg")
+        #         )
+        #     except PermissionError:
+        #         print("PermissionError: The file is being used by another process. Waiting for 5 seconds...")
+        #         time.sleep(5)
+        # await message.answer_media_group(
+        #     # Не забудьте вызвать build()
+        #     media=album_builder.build()
+        # )
+        # shutil.rmtree(f"before_prepare_images/{message.from_user.id}")
     except Exception as e:
         print(e)
-        shutil.rmtree(f"before_prepare_images/{message.from_user.id}")
-
-
 
 
 
