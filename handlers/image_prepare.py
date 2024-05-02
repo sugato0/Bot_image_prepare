@@ -51,17 +51,17 @@ async def waiting_surname(message: types.Message, state: FSMContext):
     await message.answer(f"Ура ваше имя <b>{data['name']}</b> \n Ура ваша фамилия {data['surname']}",
                          parse_mode="HTML")
 
-@router.callback_query(F.data == "Груша")
-async def names_prepare(call: types.CallbackQuery):
-    await call.answer(text=f"Вы нажали на {call.data}",show_allert = True)
-@router.message(User.waiting_photo,F.photo)
-async def waiting_name(message: types.Message, state: FSMContext):
+# @router.callback_query(F.data == "Груша")
+# async def names_prepare(call: types.CallbackQuery):
+#     await call.answer(text=f"Вы нажали на {call.data}",show_allert = True)
+# @router.message(User.waiting_photo,F.photo)
+# async def waiting_name(message: types.Message, state: FSMContext):
 
 
-    await state.set_state(None)
-    await state.clear()
-    await message.answer(f"Ура фото тут",
-                         parse_mode="HTML")
+#     await state.set_state(None)
+#     await state.clear()
+#     await message.answer(f"Ура фото тут",
+#                          parse_mode="HTML")
 
 
 
